@@ -4,7 +4,9 @@ from discord.ext import commands
 from discord import app_commands
 import psycopg2
 from dotenv import load_dotenv
-from db import get_specific_data, get_all_data_in_column, get_all_data_in_table, insert_specific_data, update_specific_data, delete_specific_data, reset_specific_data, connect_db, check_existence, insert_many_data
+from db import get_specific_data, get_all_data_in_column, get_all_data_in_table, insert_specific_data, \
+    update_specific_data, delete_specific_data, reset_specific_data, connect_db, check_existence, insert_many_data, \
+    get_dynamic_data, delete_dynamic_data, delete_dynamic_data, get_singular_by_many, update_singular_by_many
 
 connect_db()
 load_dotenv()
@@ -141,11 +143,61 @@ async def remove_periods(interaction, period: int):
 
 
 @tree.command(name="add_homework", description="Adds a homework to your to-do list!")
-@app_commands.describe(homework_name="What is the name of the homework?", class_name="What class is this homework from?", class_teacher="Who is the teacher of this class?", period="What period is this homework from?",)
-async def add_homework(interaction, homework_name: str, class_name: str, class_teacher: str, period: int):
-    data_columns = ("user_id", "homework_name", "class_name", "class_teacher", "class_period")
-    value_columns = [(interaction.user.id, homework_name, class_name, class_teacher, period)]
+@app_commands.describe(homework_name="What is the name of the homework?", class_name="What class is this homework from?", class_teacher="Who is the teacher of this class?", period="What period is this homework from?")
+async def add_homework(interaction, homework_name: str, class_name: str, class_teacher: str, period: int, due_date: str):
+    data_columns = ("user_id", "homework_name", "class_name", "class_teacher", "class_period", "due_date")
+    value_columns = [(interaction.user.id, homework_name, class_name, class_teacher, period, due_date)]
     insert_many_data("homework_data", data_columns, value_columns)
     await interaction.response.send_message(content="Successfully inserted homework!", ephemeral=True)
+
+
+@tree.command(name="show_homework", description="Shows you your to-do list!")
+async def show_homework(interaction):
+    data = get_all_data_in_column("homework_data", interaction.user.id, "user_id")
+    embed = discord.Embed(title="All Homework Details:", color=discord.Color.yellow())
+    homework_number = 0
+    for row in data:
+        # This looks awful with the row indexing, but it works for now (will need to fix later).
+        homework_number += 1
+        embed.add_field(name=f"{homework_number}. Homework Name:", value=f"{row[4]}")
+        embed.add_field(name="Class Name:", value=f"{row[3]}")
+        embed.add_field(name="Class Teacher:", value=f"{row[2]}")
+        embed.add_field(name="Class Period:", value=f"{row[1]}")
+        embed.add_field(name="Due Date:", value=f"{row[6]}")
+        if row[5] is False:
+            emoji = "❌"
+        else:
+            emoji = "✅"
+        embed.add_field(name="Homework Status:", value=f"{emoji}")
+        embed.add_field(name="\u200b", value="_", inline=False)
+    await interaction.response.send_message(embed=embed)
+
+
+@tree.command(name="remove_homework", description="Removes a homework from your to-do list!")
+@app_commands.describe(homework_name="What is the name of the homework?", class_name="What class is this homework from?", class_teacher="Who is the teacher of this class?", period="What period is this homework from?")
+async def remove_homework(interaction, homework_name: str, class_name: str, class_teacher: str, period: int, due_date: str):
+    data_columns = ("user_id", "homework_name", "class_name", "class_teacher", "class_period", "due_date")
+    value_columns = [(interaction.user.id, homework_name, class_name, class_teacher, period, due_date)]
+    existence = get_dynamic_data("homework_data", data_columns, value_columns)
+    if not existence:
+        await interaction.response.send_message(content="This homework does not exist!", ephemeral=True)
+    else:
+        delete_dynamic_data("homework_data", data_columns, value_columns)
+        await interaction.response.send_message(content="Successfully deleted homework!", ephemeral=True)
+
+
+# @tree.command(name="change_homework_status", description="Changes the status of a homework.")
+# @app_commands.describe(homework_name="What is the name of the homework?", class_name="What class is this homework from?", class_teacher="Who is the teacher of this class?", period="What period is this homework from?")
+# async def change_homework_status(interaction, homework_name: str, class_name: str, class_teacher: str, period: int, due_date: str):
+#     data_columns = ("user_id", "homework_name", "class_name", "class_teacher", "class_period", "due_date")
+#     value_columns = [(interaction.user.id, homework_name, class_name, class_teacher, period, due_date)]
+#     existence = get_dynamic_data("homework_data", data_columns, value_columns)
+#     if not existence:
+#         await interaction.response.send_message(content="This homework does not exist!", ephemeral=True)
+#     else:
+#         current_status = get_singular_by_many("homework_data", data_columns, value_columns, "homework_status")
+#         value_columns = [(not current_status, interaction.user.id, homework_name, class_name, class_teacher, period, due_date)]
+#         update_singular_by_many("homework_data", data_columns, value_columns, "homework_status")
+
 
 client.run(str(os.getenv("DISCORD_TOKEN")))
