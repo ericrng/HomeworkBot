@@ -1,15 +1,15 @@
 import psycopg2
 import os
 from dotenv import load_dotenv
-from psycopg2.extras import execute_batch
+from psycopg2.extras import execute_batch, execute_values
 from psycopg2 import sql
 
 load_dotenv(override=True)
-DB_URL = str(os.getenv("DB_URL"))
+DB_NAME = str(os.getenv("DB_NAME"))
 PASSWORD = str(os.getenv("PASSWORD"))
 USERNAME = str(os.getenv("USERNAME"))
 HOST = str(os.getenv("HOST"))
-conn = psycopg2.connect(host=HOST, dbname=DB_URL, user=USERNAME, password=PASSWORD)
+conn = psycopg2.connect(host=HOST, dbname=DB_NAME, user=USERNAME, password=PASSWORD)
 cur = conn.cursor()
 
 # Need to check against to prevent SQL injections.
@@ -54,8 +54,10 @@ cur.execute("""CREATE TABLE IF NOT EXISTS valid_names (
 
 conn.commit()
 
+
 def connect_db():
     return conn, cur
+
 
 def close_db():
     cur.close()
@@ -84,6 +86,7 @@ def check_column_validity(column):
         return column_validity
 
 
+# Gets a specific piece of data using a reference column and a reference value.
 def get_specific_data(table, column, unique_value, unique_column):
     if check_table_validity(table) and check_column_validity(column) and check_column_validity(unique_column):
         query = sql.SQL("SELECT {column} FROM {table} WHERE {unique_column} = %s;").format(table=sql.Identifier(table), column=sql.Identifier(column), unique_column=sql.Identifier(unique_column))
@@ -94,6 +97,7 @@ def get_specific_data(table, column, unique_value, unique_column):
         raise ValueError
 
 
+# Gets whatever is in a table that matches the columns and values.
 def get_dynamic_data(table, columns, values):
     for column in columns:
         if not check_column_validity(column):
@@ -109,6 +113,7 @@ def get_dynamic_data(table, columns, values):
         return record_data
 
 
+# Gets one value from one column from the table that matches the columns and values.
 def get_singular_by_many(table, columns, values, singular_column):
     for column in columns:
         if not check_column_validity(column):
@@ -124,6 +129,7 @@ def get_singular_by_many(table, columns, values, singular_column):
         return record_data
 
 
+# Gets all the data in a column that matches a reference column and value.
 def get_all_data_in_column(table, unique_value, unique_column):
     if check_table_validity(table) and check_column_validity(unique_column):
         query = sql.SQL("SELECT * FROM {table} WHERE {unique_column} = %s;").format(table=sql.Identifier(table), unique_column=sql.Identifier(unique_column))
@@ -134,6 +140,7 @@ def get_all_data_in_column(table, unique_value, unique_column):
         raise ValueError
 
 
+# Gets all the data from a table.
 def get_all_data_in_table(table):
     if check_table_validity(table):
         query = sql.SQL("SELECT * FROM {table};").format(table=sql.Identifier(table))
@@ -144,6 +151,7 @@ def get_all_data_in_table(table):
         raise ValueError
 
 
+# Inserts a singular value to a column in a table.
 def insert_specific_data(table, column, value):
     if check_table_validity(table) and check_column_validity(column):
         query = sql.SQL("INSERT INTO {table} ({column}) VALUES (%s);").format(table=sql.Identifier(table), column=sql.Identifier(column))
@@ -153,6 +161,7 @@ def insert_specific_data(table, column, value):
         raise ValueError
 
 
+# Inserts multiple columns and values in a table.
 def insert_many_data(table, columns, values):
     for column in columns:
         if not check_column_validity(column):
@@ -167,6 +176,7 @@ def insert_many_data(table, columns, values):
         conn.commit()
 
 
+# Updates a specific columns value when it matches a reference value and reference column.
 def update_specific_data(table, column, value, unique_value, unique_column):
     if check_table_validity(table) and check_column_validity(column) and check_column_validity(unique_column):
         query = sql.SQL("UPDATE {table} SET {column} = %s WHERE {unique_column} = %s;").format(table=sql.Identifier(table), column=sql.Identifier(column), unique_column=sql.Identifier(unique_column))
@@ -174,21 +184,25 @@ def update_specific_data(table, column, value, unique_value, unique_column):
         conn.commit()
     raise ValueError
 
-# Need to find another method, currently doesn't work.
-# def update_singular_by_many(table, columns, values, unique_column):
-#     for column in columns:
-#         if not check_column_validity(column):
-#             raise ValueError
-#     if not check_table_validity(table):
-#         raise ValueError
-#     else:
-#         col = sql.SQL(", ").join(sql.Identifier(elements) for elements in columns)
-#         val = sql.SQL(", ").join(sql.Placeholder() for elements in range(len(columns)))
-#         query = sql.SQL("UPDATE {table} SET ({unique_column}) = (%s) WHERE ({columns}) = ({values})").format(table=sql.Identifier(table), columns=col, values=val, unique_column=sql.Identifier(unique_column))
-#         execute_batch(cur, query, values)
-#         conn.commit()
+
+# Updates one specific column's value if it matches reference values and columns.
+# However, it is quite rudimentary and requires specific formatting to work in this instance.
+# Needs to be refactored in the future.
+def update_singular_by_many(table, columns, values, unique_column):
+    for column in columns:
+        if not check_column_validity(column):
+            raise ValueError
+    if not check_table_validity(table):
+        raise ValueError
+    else:
+        col = sql.SQL(", ").join(sql.Identifier(elements) for elements in columns)
+        val = sql.SQL(", ").join(sql.Placeholder() for elements in range(len(columns)))
+        query = sql.SQL("UPDATE {table} SET {unique_column} = %s WHERE ({columns}) = ({values})").format(table=sql.Identifier(table), columns=col, values=val, unique_column=sql.Identifier(unique_column))
+        execute_batch(cur, query, values)
+        conn.commit()
 
 
+# Resets a columns value in a table if it matches a reference value and column.
 def reset_specific_data(table, column, unique_value, unique_column):
     if check_table_validity(table) and check_column_validity(column) and check_column_validity(unique_column):
         query = sql.SQL("UPDATE {table} SET {column} = DEFAULT WHERE {unique_column} = %s;").format(table=sql.Identifier(table), column=sql.Identifier(column), unique_column=sql.Identifier(unique_column))
@@ -197,6 +211,7 @@ def reset_specific_data(table, column, unique_value, unique_column):
     raise ValueError
 
 
+# Resets multiple column values when it matches a reference value and column.
 def reset_column(table, column, unique_value, unique_column):
     if check_table_validity(table) and check_column_validity(column) and check_column_validity(unique_column):
         query = sql.SQL("UPDATE {table} SET {column} = DEFAULT WHERE {unique_column} = %s;").format(table=sql.Identifier(table), column=sql.Identifier(column), unique_column=sql.Identifier(unique_column))
@@ -206,6 +221,7 @@ def reset_column(table, column, unique_value, unique_column):
         raise ValueError
 
 
+# Deletes a specific piece of data from a specific column.
 def delete_specific_data(table, unique_value, unique_column):
     if check_table_validity(table) and check_column_validity(unique_column):
         query = sql.SQL("DELETE FROM {table} WHERE {unique_column} = %s;").format(table=sql.Identifier(table), unique_column=sql.Identifier(unique_column))
@@ -215,6 +231,7 @@ def delete_specific_data(table, unique_value, unique_column):
         raise ValueError
 
 
+# Deletes specifically where the reference values equal the reference columns in a table.
 def delete_dynamic_data(table, columns, values):
     for column in columns:
         if not check_column_validity(column):
@@ -229,6 +246,7 @@ def delete_dynamic_data(table, columns, values):
         conn.commit()
 
 
+# Checks if a specific column and value exist.
 def check_existence(table, column, value):
     if check_table_validity(table) and check_column_validity(column):
         query = sql.SQL("SELECT * FROM {table} WHERE {column} = %s;").format(table=sql.Identifier(table), column=sql.Identifier(column))
