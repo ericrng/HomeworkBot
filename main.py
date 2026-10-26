@@ -17,6 +17,7 @@ client = discord.Client(intents=intents)
 bot = commands.Bot(command_prefix="/", intents=intents)
 tree = app_commands.CommandTree(client)
 WHITELIST = int(os.getenv("AUTHORIZED_USER"))
+DISCORD_TOKEN = str(os.getenv("DISCORD_TOKEN"))
 
 
 @client.event
@@ -242,4 +243,4 @@ async def info(interaction):
     await interaction.response.send_message(embed=embed)
 
 
-client.run(str(os.getenv("DISCORD_TOKEN")))
+client.run(DISCORD_TOKEN)
