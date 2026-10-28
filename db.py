@@ -6,17 +6,17 @@ from psycopg2 import sql
 
 load_dotenv(override=True)
 # IF YOU ARE NOT USING A DATABASE URL
-DB_NAME = str(os.getenv("DB_NAME"))
-PASSWORD = str(os.getenv("PASSWORD"))
-USERNAME = str(os.getenv("USERNAME"))
-HOST = str(os.getenv("HOST"))
+# DB_NAME = str(os.getenv("DB_NAME"))
+# PASSWORD = str(os.getenv("PASSWORD"))
+# USERNAME = str(os.getenv("USERNAME"))
+# HOST = str(os.getenv("HOST"))
 DB_URL = str(os.getenv("DB_URL"))
-conn = psycopg2.connect(dbname=DB_NAME, user=USERNAME, password=PASSWORD, host=HOST)
+conn = psycopg2.connect(DB_URL)
 cur = conn.cursor()
 
 # Need to check against to prevent SQL injections.
-VALID_TABLES = {"user_data", "homework_data", "valid_periods", "valid_names", "valid_teachers", "user_settings"}
-VALID_COLUMNS = {"user_id", "class_name", "class_period", "class_teacher", "homework_name", "homework_status", "due_date", "auto_sync", "auto_delete"}
+VALID_TABLES = {"user_data", "homework_data", "valid_periods", "valid_names", "valid_teachers"}
+VALID_COLUMNS = {"user_id", "class_name", "class_period", "class_teacher", "homework_name", "homework_status", "due_date"}
 
 
 # Structure for future use.
@@ -68,17 +68,24 @@ def close_db():
 
 # FOR CHECKING IF TABLE IS ONE I MADE.
 def check_table_validity(table):
+    table_validity = bool()
     if table in VALID_TABLES:
-        return True
+        table_validity = True
+        return table_validity
     else:
-        return False
+        table_validity = False
+        return table_validity
+
 
 # FOR CHECKING IF COLUMN IS ONE I MADE.
 def check_column_validity(column):
+    column_validity = bool()
     if column in VALID_COLUMNS:
-        return True
+        column_validity = True
+        return column_validity
     else:
-        return False
+        column_validity = False
+        return column_validity
 
 
 # Gets a specific piece of data using a reference column and a reference value.
@@ -124,22 +131,11 @@ def get_singular_by_many(table, columns, values, singular_column):
         return record_data
 
 
-# Gets all data in a column where it is equal to a value.
-def get_data_by_value(table, column, value):
-    if check_table_validity(table) and check_column_validity(column):
-        query = sql.SQL("SELECT * FROM {table} WHERE {unique_column} = %s;").format(table=sql.Identifier(table), unique_column=sql.Identifier(column))
-        cur.execute(query, (value,))
-        data = cur.fetchall()
-        return data
-    else:
-        raise ValueError
-
-
-# Gets all the data in a column.
-def get_all_data_in_column(table, column):
-    if check_table_validity(table) and check_column_validity(column):
-        query = sql.SQL("SELECT {column} FROM {table};").format(table=sql.Identifier(table), column=sql.Identifier(column))
-        cur.execute(query)
+# Gets all the data in a column that matches a reference column and value.
+def get_all_data_in_column(table, unique_value, unique_column):
+    if check_table_validity(table) and check_column_validity(unique_column):
+        query = sql.SQL("SELECT * FROM {table} WHERE {unique_column} = %s;").format(table=sql.Identifier(table), unique_column=sql.Identifier(unique_column))
+        cur.execute(query, (unique_value,))
         data = cur.fetchall()
         return data
     else:
@@ -214,14 +210,14 @@ def reset_specific_data(table, column, unique_value, unique_column):
         query = sql.SQL("UPDATE {table} SET {column} = DEFAULT WHERE {unique_column} = %s;").format(table=sql.Identifier(table), column=sql.Identifier(column), unique_column=sql.Identifier(unique_column))
         cur.execute(query, (unique_value,))
         conn.commit()
-    else:
-        raise ValueError
+    raise ValueError
+
 
 # Resets multiple column values when it matches a reference value and column.
-def reset_column(table, column):
-    if check_table_validity(table) and check_column_validity(column):
-        query = sql.SQL("UPDATE {table} SET {column} = DEFAULT;").format(table=sql.Identifier(table), column=sql.Identifier(column))
-        cur.execute(query)
+def reset_column(table, column, unique_value, unique_column):
+    if check_table_validity(table) and check_column_validity(column) and check_column_validity(unique_column):
+        query = sql.SQL("UPDATE {table} SET {column} = DEFAULT WHERE {unique_column} = %s;").format(table=sql.Identifier(table), column=sql.Identifier(column), unique_column=sql.Identifier(unique_column))
+        cur.execute(query, (unique_value,))
         conn.commit()
     else:
         raise ValueError

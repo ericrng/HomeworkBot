@@ -6,8 +6,7 @@ import psycopg2
 from dotenv import load_dotenv
 from db import get_specific_data, get_all_data_in_column, get_all_data_in_table, insert_specific_data, \
     update_specific_data, delete_specific_data, reset_specific_data, connect_db, check_existence, insert_many_data, \
-    get_dynamic_data, delete_dynamic_data, delete_dynamic_data, get_singular_by_many, update_singular_by_many, \
-    get_data_by_value
+    get_dynamic_data, delete_dynamic_data, delete_dynamic_data, get_singular_by_many, update_singular_by_many
 from datetime import datetime as dt
 
 connect_db()
@@ -34,16 +33,18 @@ async def on_ready():
 async def insert_class_periods(interaction, start: int, end: int):
     # This if-else statement block needs to be simplified in the future.
     if interaction.user.id == WHITELIST:
-        if end > start >= 1:
-            for i in range(start, end+1):
-                if not check_existence("valid_periods", "class_period", i):
-                    insert_specific_data("valid_periods", "class_period", i)
-                else:
-                    # Does nothing. Meaning no values are inserted, so existing values stay.
-                    pass
-            await interaction.response.send_message(content=f"Successfully inserted periods {start} to {end}!", ephemeral=True)
+        if end > start:
+            if start >= 1:
+                for i in range(start, end+1):
+                    if not check_existence("valid_periods", "class_period", i):
+                        insert_specific_data("valid_periods", "class_period", i)
+                    else:
+                        pass
+                await interaction.response.send_message(content=f"Successfully inserted periods {start} to {end}!", ephemeral=True)
+            else:
+                await interaction.response.send_message(content="Period has to be greater than or equal to 1.", ephemeral=True)
         else:
-            await interaction.response.send_message(content="End period must be greater than start period and start period cannot be less than 1.", ephemeral=True)
+            await interaction.response.send_message(content="Your end period cannot be less than your start period.", ephemeral=True)
     else:
         await interaction.response.send_message(content="You do not have permission to use this command.", ephemeral=True)
 
@@ -53,7 +54,8 @@ async def show_class_periods(interaction):
     periods = get_all_data_in_table("valid_periods")
     embed = discord.Embed(title="All class periods:", color=discord.Color.green())
     for period in periods:
-        embed.add_field(name=f"Period {period[0]}", value="\u200b", inline=False)
+        int_period = period[0]
+        embed.add_field(name=f"Period {int_period}", value="\u200b", inline=False)
     await interaction.response.send_message(embed=embed)
 
 
@@ -75,7 +77,8 @@ async def show_class_names(interaction):
     class_names = get_all_data_in_table("valid_names")
     embed = discord.Embed(title="All class names:", color=discord.Color.red())
     for class_name in class_names:
-        embed.add_field(name=f"{class_name[0]}", value="\u200b", inline=False)
+        str_class_name = class_name[0]
+        embed.add_field(name=f"{str_class_name}", value="\u200b", inline=False)
     await interaction.response.send_message(embed=embed)
 
 
@@ -97,7 +100,8 @@ async def show_teacher_names(interaction):
     teacher_names = get_all_data_in_table("valid_teachers")
     embed = discord.Embed(title="All teacher names:", color=discord.Color.blue())
     for teacher_name in teacher_names:
-        embed.add_field(name=f"{teacher_name[0]}", value="\u200b", inline=False)
+        str_teacher_nane = teacher_name[0]
+        embed.add_field(name=f"{str_teacher_nane}", value="\u200b", inline=False)
     await interaction.response.send_message(embed=embed)
 
 
@@ -150,17 +154,14 @@ async def add_homework(interaction, homework_name: str, class_name: str, class_t
     formatted_periods, formatted_classes, formatted_teachers = (period,), (class_name,), (class_teacher,)
     # Checks if due date is before current date or ahead of current date.
     try:
-        # Gets current time.
+        inserted_month, inserted_day, inserted_year = due_date.split("/")
         current_time = dt.now()
-        # Turns inputted due_date into a date in datetime.
-        converted_due_date = dt.strptime(due_date, "%m/%d/%Y")
-        # Checks if the converted due date is ahead of the current time.
-        if current_time <= converted_due_date:
+        current_month, current_day, current_year = current_time.month, current_time.day, current_time.year
+        if int(inserted_month) >= current_month and int(inserted_day) >= current_day and int(inserted_year) >= current_year:
             pass
         else:
-            await interaction.response.send_message(content="You cannot have a due-date that is in the past!", ephemeral=True)
+            await interaction.response.send_message(content="Incorrect due date format! (Tip: Write the full year)", ephemeral=True)
             return
-    # Rejects if due date is in the past.
     except ValueError:
         await interaction.response.send_message(content="Invalid due date format!", ephemeral=True)
         return
@@ -178,31 +179,25 @@ async def add_homework(interaction, homework_name: str, class_name: str, class_t
 
 @tree.command(name="show_homework", description="Shows you your to-do list!")
 async def show_homework(interaction):
-    data = get_data_by_value("homework_data", "user_id", interaction.user.id)
-    embed_list = []
+    data = get_all_data_in_column("homework_data", interaction.user.id, "user_id")
     embed = discord.Embed(title="All Homework Details:", color=discord.Color.yellow())
-    enumerated_data = list(enumerate(data))
-    for index, value in enumerated_data:
+    homework_number = 0
+    for row in data:
+        # CURRENTLY CANNOT HANDLE MORE THAN 3 HOMEWORKS BASED OFF OF EMBED SIZE.
         # This looks awful with the row indexing, but it works for now (will need to fix later).
-        embed.add_field(name=f"{index+1}. Homework Name:", value=f"{value[4]}")
-        embed.add_field(name="Class Name:", value=f"{value[3]}")
-        embed.add_field(name="Class Teacher:", value=f"{value[2]}")
-        embed.add_field(name="Class Period:", value=f"{value[1]}")
-        embed.add_field(name="Due Date:", value=f"{value[6]}")
-        if value[5] is False:
+        homework_number += 1
+        embed.add_field(name=f"{homework_number}. Homework Name:", value=f"{row[4]}")
+        embed.add_field(name="Class Name:", value=f"{row[3]}")
+        embed.add_field(name="Class Teacher:", value=f"{row[2]}")
+        embed.add_field(name="Class Period:", value=f"{row[1]}")
+        embed.add_field(name="Due Date:", value=f"{row[6]}")
+        if row[5] is False:
             emoji = "❌"
         else:
             emoji = "✅"
         embed.add_field(name="Homework Status:", value=f"{emoji}")
         embed.add_field(name="\u200b", value="_", inline=False)
-        # Checks if it reaches the embed limit via counting homeworks + Adds the last embed.
-        if (index + 1) % 3 == 0 or (index + 1) == len(enumerated_data):
-            embed_list.append(embed)
-            embed = discord.Embed(title="", color=discord.Color.yellow())
-    await interaction.response.defer()
-    # Sends the list of embeds.
-    for embeds in embed_list:
-        await interaction.followup.send(embed=embeds)
+    await interaction.response.send_message(embed=embed)
 
 
 @tree.command(name="remove_homework", description="Removes a homework from your to-do list!")
@@ -246,12 +241,6 @@ async def info(interaction):
     embed.add_field(name="Homework Commands", value="There are 7 rudimentary homework commands: **add, remove, show, and change status**. These can be used by **anyone** (though for the show command, it currently only **supports 3 homeworks**.)", inline=False)
     embed.add_field(name="Future Commands", value="HomeworkBot is still **under development** (therefore **bugs should be expected**) and new commands will be added such as the ability to **sync your to-do lists** with others.", inline=False)
     await interaction.response.send_message(embed=embed)
-
-
-@tree.command(name="settings", description="Provides your settings information on HomeworkBot!")
-async def settings(interaction):
-    if not check_existence("user_settings", "user_id", interaction.user.id):
-        insert_specific_data("user_settings", "user_id", interaction.user.id)
 
 
 client.run(DISCORD_TOKEN)
