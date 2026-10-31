@@ -12,10 +12,11 @@ def get_settings(user_id):
 def auto_delete_function(status, user_id):
     if status:
         output = get_specific_data("homework_data", "due_date", user_id, "user_id")
-        for dates in output:
-            if dt.strptime(dates, "%m/%d/%Y") < dt.now():
-                delete_specific_data("homework_data", output, "due_date")
-            else:
-                pass
+        if not output:
+            pass
+        else:
+            for dates in output:
+                if dt.strptime(dates, "%m/%d/%Y") < dt.now():
+                    delete_specific_data("homework_data", output, "due_date")
     else:
         pass
