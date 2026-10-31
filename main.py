@@ -2,13 +2,13 @@ import discord
 import os
 from discord.ext import commands
 from discord import app_commands
-import psycopg2
 from dotenv import load_dotenv
 from db import get_specific_data, get_all_data_in_column, get_all_data_in_table, insert_specific_data, \
     update_specific_data, delete_specific_data, reset_specific_data, connect_db, check_existence, insert_many_data, \
     get_dynamic_data, delete_dynamic_data, delete_dynamic_data, get_singular_by_many, update_singular_by_many, \
     get_data_by_value
 from datetime import datetime as dt
+from helper import get_settings, auto_delete_function
 
 connect_db()
 load_dotenv()
@@ -19,6 +19,26 @@ bot = commands.Bot(command_prefix="/", intents=intents)
 tree = app_commands.CommandTree(client)
 WHITELIST = int(os.getenv("AUTHORIZED_USER"))
 DISCORD_TOKEN = str(os.getenv("DISCORD_TOKEN"))
+
+
+class Settings(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=30)
+    @discord.ui.button(label="Change Auto-Sync", style=discord.ButtonStyle.blurple)
+    async def change_auto_sync(self, interaction, button):
+        current_sync_settings = get_settings(interaction.user.id)[0]
+        update_specific_data("user_settings", "auto_sync", not current_sync_settings, interaction.user.id, "user_id")
+        await interaction.response.send_message(content="Successfully changed sync settings.", ephemeral=True)
+    @discord.ui.button(label="Change Auto-Delete", style=discord.ButtonStyle.blurple)
+    async def change_auto_delete(self, interaction, button):
+        current_delete_settings = get_settings(interaction.user.id)[1]
+        update_specific_data("user_settings", "auto_delete", not current_delete_settings, interaction.user.id, "user_id")
+        await interaction.response.send_message(content="Successfully changed delete settings.", ephemeral=True)
+    @discord.ui.button(label="Change Visibility Settings", style=discord.ButtonStyle.blurple)
+    async def change_visibility_settings(self, interaction, button):
+        current_visibility_settings = get_settings(interaction.user.id)[2]
+        update_specific_data("user_settings", "visible_homework", not current_visibility_settings, interaction.user.id, "user_id")
+        await interaction.response.send_message(content="Successfully changed delete settings.", ephemeral=True)
 
 
 @client.event
@@ -75,7 +95,7 @@ async def show_class_names(interaction):
     class_names = get_all_data_in_table("valid_names")
     embed = discord.Embed(title="All class names:", color=discord.Color.red())
     for class_name in class_names:
-        embed.add_field(name=f"{class_name[0]}", value="\u200b", inline=False)
+        embed.add_field(name=f"{class_name[1]}", value="\u200b", inline=False)
     await interaction.response.send_message(embed=embed)
 
 
@@ -97,7 +117,7 @@ async def show_teacher_names(interaction):
     teacher_names = get_all_data_in_table("valid_teachers")
     embed = discord.Embed(title="All teacher names:", color=discord.Color.blue())
     for teacher_name in teacher_names:
-        embed.add_field(name=f"{teacher_name[0]}", value="\u200b", inline=False)
+        embed.add_field(name=f"{teacher_name[1]}", value="\u200b", inline=False)
     await interaction.response.send_message(embed=embed)
 
 
@@ -145,8 +165,7 @@ async def remove_periods(interaction, period: int):
 async def add_homework(interaction, homework_name: str, class_name: str, class_teacher: str, period: int, due_date: str):
     data_columns = ("user_id", "homework_name", "class_name", "class_teacher", "class_period", "due_date")
     value_columns = [(interaction.user.id, homework_name, class_name, class_teacher, period, due_date)]
-    existence = get_dynamic_data("homework_data", data_columns, value_columns)
-    valid_periods, valid_classes, valid_teachers = get_all_data_in_table("valid_periods"), get_all_data_in_table("valid_names"), get_all_data_in_table("valid_teachers")
+    valid_periods, valid_classes, valid_teachers = get_all_data_in_table("valid_periods"), get_all_data_in_column("valid_names", "class_name"), get_all_data_in_column("valid_teachers", "class_teacher")
     formatted_periods, formatted_classes, formatted_teachers = (period,), (class_name,), (class_teacher,)
     # Checks if due date is before current date or ahead of current date.
     try:
@@ -160,7 +179,7 @@ async def add_homework(interaction, homework_name: str, class_name: str, class_t
         else:
             await interaction.response.send_message(content="You cannot have a due-date that is in the past!", ephemeral=True)
             return
-    # Rejects if due date is in the past.
+    # Rejects if due date is in the past or incorrect formatting.
     except ValueError:
         await interaction.response.send_message(content="Invalid due date format!", ephemeral=True)
         return
@@ -169,7 +188,7 @@ async def add_homework(interaction, homework_name: str, class_name: str, class_t
         await interaction.response.send_message(content="The parameters of this homework are not valid!", ephemeral=True)
         return
     # Checks if the homework already exists (in which case we ignore.)
-    if existence:
+    if get_dynamic_data("homework_data", data_columns, value_columns):
         await interaction.response.send_message(content="This homework already exists!", ephemeral=True)
     else:
         insert_many_data("homework_data", data_columns, value_columns)
@@ -178,28 +197,29 @@ async def add_homework(interaction, homework_name: str, class_name: str, class_t
 
 @tree.command(name="show_homework", description="Shows you your to-do list!")
 async def show_homework(interaction):
+    auto_delete_function(get_settings(interaction.user.id)[1], interaction.user.id)
     data = get_data_by_value("homework_data", "user_id", interaction.user.id)
     embed_list = []
     embed = discord.Embed(title="All Homework Details:", color=discord.Color.yellow())
+    # Checks if any homeworks exist.
+    await interaction.response.defer()
+    if not data:
+        await interaction.followup.send(embed=embed)
     enumerated_data = list(enumerate(data))
     for index, value in enumerated_data:
         # This looks awful with the row indexing, but it works for now (will need to fix later).
-        embed.add_field(name=f"{index+1}. Homework Name:", value=f"{value[4]}")
-        embed.add_field(name="Class Name:", value=f"{value[3]}")
-        embed.add_field(name="Class Teacher:", value=f"{value[2]}")
-        embed.add_field(name="Class Period:", value=f"{value[1]}")
-        embed.add_field(name="Due Date:", value=f"{value[6]}")
-        if value[5] is False:
-            emoji = "❌"
-        else:
-            emoji = "✅"
+        embed.add_field(name=f"{index+1}. Homework Name:", value=f"{value[5]}")
+        embed.add_field(name="Class Name:", value=f"{value[4]}")
+        embed.add_field(name="Class Teacher:", value=f"{value[3]}")
+        embed.add_field(name="Class Period:", value=f"{value[2]}")
+        embed.add_field(name="Due Date:", value=f"{value[7]}")
+        emoji = "❌" if value[6] is False else "✅"
         embed.add_field(name="Homework Status:", value=f"{emoji}")
         embed.add_field(name="\u200b", value="_", inline=False)
         # Checks if it reaches the embed limit via counting homeworks + Adds the last embed.
         if (index + 1) % 3 == 0 or (index + 1) == len(enumerated_data):
             embed_list.append(embed)
             embed = discord.Embed(title="", color=discord.Color.yellow())
-    await interaction.response.defer()
     # Sends the list of embeds.
     for embeds in embed_list:
         await interaction.followup.send(embed=embeds)
@@ -208,10 +228,10 @@ async def show_homework(interaction):
 @tree.command(name="remove_homework", description="Removes a homework from your to-do list!")
 @app_commands.describe(homework_name="What is the name of the homework?", class_name="What class is this homework from?", class_teacher="Who is the teacher of this class?", period="What period is this homework from?")
 async def remove_homework(interaction, homework_name: str, class_name: str, class_teacher: str, period: int, due_date: str):
+    auto_delete_function(get_settings(interaction.user.id)[1], interaction.user.id)
     data_columns = ("user_id", "homework_name", "class_name", "class_teacher", "class_period", "due_date")
     value_columns = [(interaction.user.id, homework_name, class_name, class_teacher, period, due_date)]
-    existence = get_dynamic_data("homework_data", data_columns, value_columns)
-    if not existence:
+    if not get_dynamic_data("homework_data", data_columns, value_columns):
         await interaction.response.send_message(content="This homework does not exist!", ephemeral=True)
     else:
         delete_dynamic_data("homework_data", data_columns, value_columns)
@@ -223,9 +243,10 @@ async def remove_homework(interaction, homework_name: str, class_name: str, clas
 async def change_homework_status(interaction, homework_name: str, class_name: str, class_teacher: str, period: int, due_date: str):
     data_columns = ("user_id", "homework_name", "class_name", "class_teacher", "class_period", "due_date")
     value_columns = [(interaction.user.id, homework_name, class_name, class_teacher, period, due_date)]
+    # Deletes any homeworks with a due date in the past.
+    auto_delete_function(get_settings(interaction.user.id)[1], interaction.user.id)
     # Gets whatever is in data_columns that is equal to value_columns, otherwise returns list.
-    existence = get_dynamic_data("homework_data", data_columns, value_columns)
-    if not existence:
+    if not get_dynamic_data("homework_data", data_columns, value_columns):
         await interaction.response.send_message(content="This homework does not exist!", ephemeral=True)
     else:
         # Checks the current status of homework_status
@@ -248,10 +269,22 @@ async def info(interaction):
     await interaction.response.send_message(embed=embed)
 
 
+# Shows settings in an embed.
 @tree.command(name="settings", description="Provides your settings information on HomeworkBot!")
 async def settings(interaction):
-    if not check_existence("user_settings", "user_id", interaction.user.id):
-        insert_specific_data("user_settings", "user_id", interaction.user.id)
+    embed = discord.Embed(title="User Settings:", color=discord.Color.orange())
+    auto_sync, auto_delete, visible_homework = get_settings(interaction.user.id)
+    embed.add_field(name="Auto Sync:", value=auto_sync, inline=True)
+    embed.add_field(name="Auto Delete:", value=auto_delete, inline=True)
+    embed.add_field(name="Visible Homework:", value=visible_homework, inline=True)
+    await interaction.response.send_message(embed=embed)
+
+
+# Outputs buttons to click to change settings.
+@tree.command(name="change_settings", description="Changes your settings information on HomeworkBot!")
+async def change_settings(interaction):
+    await interaction.response.send_message(content="Click to Change Settings:", view=Settings(), ephemeral=True)
+
 
 
 client.run(DISCORD_TOKEN)
