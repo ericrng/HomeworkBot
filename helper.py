@@ -15,5 +15,7 @@ def auto_delete_function(status, user_id):
         for dates in output:
             if dt.strptime(dates, "%m/%d/%Y") < dt.now():
                 delete_specific_data("homework_data", output, "due_date")
+            else:
+                pass
     else:
         pass
