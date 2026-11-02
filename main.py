@@ -1,14 +1,15 @@
 import discord
 import os
+import ast
 from discord.ext import commands
 from discord import app_commands
 from dotenv import load_dotenv
 from db import get_specific_data, get_all_data_in_column, get_all_data_in_table, insert_specific_data, \
     update_specific_data, delete_specific_data, reset_specific_data, connect_db, check_existence, insert_many_data, \
     get_dynamic_data, delete_dynamic_data, delete_dynamic_data, get_singular_by_many, update_singular_by_many, \
-    get_data_by_value
+    get_data_by_value, get_many_by_many, get_many_by_singular, get_data_by_column_value
 from datetime import datetime as dt
-from helper import get_settings, auto_delete_function
+from helper import get_settings, auto_delete_function, auto_sync_function
 
 connect_db()
 load_dotenv()
@@ -192,6 +193,15 @@ async def add_homework(interaction, homework_name: str, class_name: str, class_t
         await interaction.response.send_message(content="This homework already exists!", ephemeral=True)
     else:
         insert_many_data("homework_data", data_columns, value_columns)
+        # Get the user id's of people who have the same user data.
+        data_columns = ("class_period", "class_teacher", "class_name")
+        value_columns = [(period, class_teacher, class_name)]
+        # Auto-Sync Feature
+        for users in get_many_by_many("user_data", data_columns, value_columns, "user_id"):
+            print(get_many_by_many("user_data", data_columns, value_columns, "user_id"))
+            # Indexing makes this harder to read.
+            if users[0] != interaction.user.id:
+                auto_sync_function(get_settings(users[0])[0], ("user_id", "homework_name", "class_name", "class_teacher", "class_period", "due_date"), [(users[0], homework_name, class_name, class_teacher, period, due_date)])
         await interaction.response.send_message(content="Successfully inserted homework!", ephemeral=True)
 
 
@@ -285,6 +295,55 @@ async def settings(interaction):
 async def change_settings(interaction):
     await interaction.response.send_message(content="Click to Change Settings:", view=Settings(), ephemeral=True)
 
+
+@tree.command(name="insert_into_schedule", description="Inserts part of your schedule into HomeworkBot! (Necessary for Auto-Sync)")
+@app_commands.describe(class_period="What period is this?", class_teacher="What teacher is this?", class_name="What class is this?")
+async def insert_schedule(interaction, class_period: int, class_teacher: str, class_name: str):
+    if class_period < 1:
+        await interaction.response.send_message(content="You can't have a period less than one!", ephemeral=True)
+    if (class_period,) in get_all_data_in_table("valid_periods") and (class_teacher,) in get_all_data_in_column("valid_teachers", "class_teacher") and (class_name,) in get_all_data_in_column("valid_names", "class_name"):
+        # Checks if something has already been set in the schedule.
+        if get_dynamic_data("user_data", ("user_id", "class_period"), [(interaction.user.id, class_period)]):
+            await interaction.response.send_message("You cannot have two classes in the same period!", ephemeral=True)
+        # Cannot have more than one instance of the same teacher and class or auto sync will add multiple homeworks at once.
+        elif get_dynamic_data("user_data", ("user_id", "class_teacher", "class_name"), [(interaction.user.id, class_teacher, class_name)]):
+            await interaction.response.send_message(content="You can't have the same teacher and same class!", ephemeral=True)
+        else:
+            insert_many_data("user_data", ("user_id", "class_period", "class_teacher", "class_name"), [(interaction.user.id, class_period, class_teacher, class_name)])
+            await interaction.response.send_message(content="Successfully inserted into schedule!", ephemeral=True)
+    else:
+        await interaction.response.send_message(content="Invalid parameters!", ephemeral=True)
+
+
+@tree.command(name="show_schedule", description="Shows your schedule on HomeworkBot!")
+async def show_schedule(interaction):
+    embed = discord.Embed(title="Schedule:", color=discord.Color.green())
+    for period in get_all_data_in_column("valid_periods", "class_period"):
+        if get_many_by_many("user_data", ("user_id", "class_period"), [(interaction.user.id, period[0])], "user_id"):
+            print(get_many_by_many("user_data", ("user_id", "class_period"), [(interaction.user.id, period[0])], "user_id"))
+            output = get_data_by_column_value("user_data", ("class_period", "class_teacher", "class_name"), [(interaction.user.id, period[0])], ("user_id", "class_period"))[0][0]
+            class_period, class_teacher, class_name = ast.literal_eval(output)
+            embed.add_field(name="Period:", value=class_period, inline=True)
+            embed.add_field(name="Teacher:", value=class_teacher, inline=True)
+            embed.add_field(name="Class:", value=class_name, inline=True)
+        else:
+            pass
+    await interaction.response.send_message(embed=embed)
+
+
+@tree.command(name="remove_from_schedule", description="Remove your schedule from HomeworkBot!")
+@app_commands.describe(class_period="What period do you want to remove?")
+async def remove_schedule(interaction, class_period: int):
+    if class_period < 1:
+        await interaction.response.send_message(content="You can't have a period less than one!", ephemeral=True)
+    if (class_period,) in get_all_data_in_column("valid_periods", "class_period"):
+        if get_many_by_many("user_data", ("user_id", "class_period"), [(interaction.user.id, class_period)], "user_id"):
+            delete_dynamic_data("user_data", ("user_id", "class_period"), [(interaction.user.id, class_period)])
+            await interaction.response.send_message(content=f"Successfully deleted period {class_period}!", ephemeral=True)
+        else:
+            await interaction.response.send_message(content="You can't delete in your schedule where it doesn't exist!", ephemeral=True)
+    else:
+        await interaction.response.send_message(content="Invalid parameters!", ephemeral=True)
 
 
 client.run(DISCORD_TOKEN)

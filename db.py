@@ -22,7 +22,7 @@ VALID_COLUMNS = {"user_id", "class_name", "class_period", "class_teacher", "home
 
 # Structure for future use.
 cur.execute("""CREATE TABLE IF NOT EXISTS user_data (
-               user_id BIGINT PRIMARY KEY,
+               user_id BIGINT,
                class_period INT,
                class_teacher VARCHAR(100),
                class_name VARCHAR(100)
@@ -99,6 +99,19 @@ def get_specific_data(table, column, unique_value, unique_column):
         raise ValueError
 
 
+def get_many_by_singular(table, columns, unique_value, unique_column):
+    for column in columns:
+        if not check_column_validity(column):
+            raise ValueError
+    if not check_table_validity(table) or not check_column_validity(unique_column):
+        raise ValueError
+    col = sql.SQL(", ").join(sql.Identifier(elements) for elements in columns)
+    query = sql.SQL("SELECT ({columns}) FROM {table} WHERE {unique_column} = %s").format(table=sql.Identifier(table), columns=col, unique_column=sql.Identifier(unique_column))
+    cur.execute(query, (unique_value,))
+    record_data = cur.fetchall()
+    return record_data
+
+
 # Gets whatever is in a table that matches the columns and values.
 def get_dynamic_data(table, columns, values):
     for column in columns:
@@ -128,6 +141,53 @@ def get_singular_by_many(table, columns, values, singular_column):
         query = sql.SQL("SELECT ({singular_column}) FROM {table} WHERE ({columns}) = ({values})").format(table=sql.Identifier(table), columns=col, values=val, singular_column=sql.Identifier(singular_column))
         execute_batch(cur, query, values)
         record_data = cur.fetchone()
+        return record_data
+
+
+def get_many_by_many(table, columns, values, target_column):
+    for column in columns:
+        if not check_column_validity(column):
+            raise ValueError
+    if not check_table_validity(table) or not check_column_validity(target_column):
+        raise ValueError
+    else:
+        col = sql.SQL(", ").join(sql.Identifier(elements) for elements in columns)
+        val = sql.SQL(", ").join(sql.Placeholder() for elements in range(len(columns)))
+        query = sql.SQL("SELECT ({target_column}) FROM {table} WHERE ({columns}) = ({values})").format(table=sql.Identifier(table), columns=col, values=val, target_column=sql.Identifier(target_column))
+        execute_batch(cur, query, values)
+        record_data = cur.fetchall()
+        return record_data
+
+
+def get_column_by_value(table, check_column, target_column, check_value):
+    if check_table_validity(table) and check_column_validity(check_column) and check_column_validity(target_column):
+        query = sql.SQL("SELECT {target_column} FROM {table} WHERE {check_column} = %s").format(table=sql.Identifier(table), check_column=sql.Identifier(check_column), target_column=sql.Identifier(target_column))
+        print(query.as_string(conn))
+        cur.execute(query, (check_value,))
+        record_data = cur.fetchall()
+        print(record_data)
+        return record_data
+    else:
+        raise ValueError
+
+
+def get_data_by_column_value(table, columns, unique_values, unique_columns):
+    for column in columns:
+        if not check_column_validity(column):
+            raise ValueError
+    for column in unique_columns:
+        if not check_column_validity(column):
+            raise ValueError
+    if not check_table_validity(table):
+        raise ValueError
+    else:
+        col = sql.SQL(", ").join(sql.Identifier(elements) for elements in columns)
+        uni_col = sql.SQL(", ").join(sql.Identifier(elements) for elements in unique_columns)
+        val = sql.SQL(", ").join(sql.Placeholder() for elements in range(len(unique_columns)))
+        query = sql.SQL("SELECT ({columns}) FROM {table} WHERE ({unique_columns}) = ({unique_values})").format(table=sql.Identifier(table), columns=col, unique_columns=uni_col, unique_values=val)
+        execute_batch(cur, query, unique_values)
+        record_data = cur.fetchmany()
+        print(record_data)
         return record_data
 
 
