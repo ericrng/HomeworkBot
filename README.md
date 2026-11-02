@@ -3,9 +3,9 @@
 ## What is HomeworkBot?
 **HomeworkBot** is a Discord Bot built for **School Discord Servers**. Its purpose is to be a **better to-do list** for **students**.
 ## Current Functions
-Currently, HomeworkBot is a Minimum Viable product (MVP). For Admins, there are currently 6 admin commands, allowing you to add and remove: valid periods, valid classes, and valid teacher names.  
-There are also currently 7 rudimentary homework commands (can be used by anyone). 3 of which allow you to view the valid periods, classes, and teachers.  
-The other 4 pertain to entering in homework into your to-do list and modifying things about your homeworks.
+HomeworkBot is still an active project and still in development, though most major functions have been completed.  
+Admins have their 6 commands below in order to set up the bot and prevent mischief.  
+Non-admin commands (Homework Commands) are public-access and can be used by anyone.
 ### Admin Commands
 - #### /insert_class_periods
 - #### /insert_class_names
@@ -17,18 +17,22 @@ The other 4 pertain to entering in homework into your to-do list and modifying t
 - #### /show_class_periods
 - #### /show_class_names
 - #### /show_teacher_names
-- #### /show_homework (CURRENTLY ONLY SUPPORTS 3 HOMEWORK DUE TO MAXIMUM EMBED FIELD LIMITS BY DISCORD)
+- #### /show_homework 
+- #### /show_schedule
 - #### /add_homework
 - #### /remove_homework
+- #### /remove_from_schedule
 - #### /change_homework_status
+- #### /insert_into_schedule
+- #### /settings
+- #### /change_settings
 ## Future Functions
-HomeworkBot is, as mentioned previously, a MVP. It currently only has the core functions as a to-do list.  
-As development continues, new commands and more features will be added. 
+HomeworkBot is, as mentioned previously, a WIP. Features will be added as suggestions come in and changes to the codebase will be done as well.
 ### Planned Features  
-* Syncing whenever a Homework is added.
-* Syncing as an optional setting for users.
-* Automatically deleting Homework that is past-due.
-* Sending multiple embeds to circumvent maximum embed field limits. 
+* ~~Syncing whenever a Homework is added.~~
+* ~~Syncing as an optional setting for users.~~
+* ~~Automatically deleting Homework that is past-due.~~
+* ~~Sending multiple embeds to circumvent maximum embed field limits.~~ 
 ### Other Potential Additions
 * Reliability Scores for syncers. (Basically, people are graded on how good their syncs are)
 * Using a Reliability Score as a filter. (Allowing users to limit who they get their syncs from)
