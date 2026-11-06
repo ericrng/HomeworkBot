@@ -11,7 +11,7 @@ PASSWORD = str(os.getenv("PASSWORD"))
 USERNAME = str(os.getenv("USERNAME"))
 HOST = str(os.getenv("HOST"))
 DB_URL = str(os.getenv("DB_URL"))
-conn = psycopg2.connect(dbname=DB_NAME, user=USERNAME, password=PASSWORD, host=HOST)
+conn = psycopg2.connect(DB_URL)
 cur = conn.cursor()
 dict_cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
