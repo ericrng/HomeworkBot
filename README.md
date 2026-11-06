@@ -26,6 +26,7 @@ Non-admin commands (Homework Commands) are public-access and can be used by anyo
 - #### /insert_into_schedule
 - #### /settings
 - #### /change_settings
+- #### /help
 ## Future Functions
 HomeworkBot is, as mentioned previously, a WIP. Features will be added as suggestions come in and changes to the codebase will be done as well.
 ### Planned Features  

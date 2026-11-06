@@ -1,4 +1,4 @@
-from db import get_data_by_value, delete_specific_data, insert_specific_data, get_column_by_value, insert_many_data
+from db import get_data_by_value, delete_specific_data, insert_specific_data, get_column_by_value, insert_many_data, check_existence
 from datetime import datetime as dt
 
 
@@ -23,6 +23,47 @@ def auto_delete_function(status, user_id):
     else:
         pass
 
+
 def auto_sync_function(status, columns, values):
     if status:
         insert_many_data("homework_data", columns, values)
+
+
+def datetime_check(due_date):
+    try:
+        if dt.now() <= dt.strptime(due_date, "%m/%d/%Y"):
+            return True
+        else:
+            return False
+    except ValueError:
+        return None
+
+def check_add_hw_parameter():
+    pass
+
+
+# Used specifically for show commands. Checks for existence and inserts single value.
+def check_single_insert(table, column, value):
+    if not check_existence(table, column, value):
+        insert_specific_data(table, column, value)
+        return True
+    else:
+        return False
+
+
+# Used specifically for delete commands. Checks for existence and deletes.
+def check_single_delete(table, column, value):
+    if check_existence(table, column, value):
+        delete_specific_data(table, value, column)
+        return True
+    else:
+        return False
+
+
+def insert_periods(start, end):
+    if not end > start >= 1:
+        return False
+    else:
+        for i in range(start, end+1):
+            check_single_insert("homework_data", "class_period", i)
+        return True
