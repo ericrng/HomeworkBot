@@ -6,10 +6,10 @@ from psycopg2 import sql
 
 load_dotenv(override=True)
 # IF YOU ARE NOT USING A DATABASE URL
-DB_NAME = str(os.getenv("DB_NAME"))
-PASSWORD = str(os.getenv("PASSWORD"))
-USERNAME = str(os.getenv("USERNAME"))
-HOST = str(os.getenv("HOST"))
+# DB_NAME = str(os.getenv("DB_NAME"))
+# PASSWORD = str(os.getenv("PASSWORD"))
+# USERNAME = str(os.getenv("USERNAME"))
+# HOST = str(os.getenv("HOST"))
 DB_URL = str(os.getenv("DB_URL"))
 conn = psycopg2.connect(DB_URL)
 cur = conn.cursor()
