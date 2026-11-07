@@ -6,12 +6,12 @@ from psycopg2 import sql
 
 load_dotenv(override=True)
 # IF YOU ARE NOT USING A DATABASE URL
-# DB_NAME = str(os.getenv("DB_NAME"))
-# PASSWORD = str(os.getenv("PASSWORD"))
-# USERNAME = str(os.getenv("USERNAME"))
-# HOST = str(os.getenv("HOST"))
+DB_NAME = str(os.getenv("DB_NAME"))
+PASSWORD = str(os.getenv("PASSWORD"))
+USERNAME = str(os.getenv("USERNAME"))
+HOST = str(os.getenv("HOST"))
 DB_URL = str(os.getenv("DB_URL"))
-conn = psycopg2.connect(DB_URL)
+conn = psycopg2.connect(dbname=DB_NAME, user=USERNAME, password=PASSWORD, host=HOST)
 cur = conn.cursor()
 dict_cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
@@ -89,9 +89,24 @@ def check_column_validity(column):
         return False
 
 
+# Prevents SQL Injections by checking against whitelist.
+# Note: All columns must be passed as a tuple/list.
+def sql_inj_prevention(table, columns, unique_columns):
+    for column in columns:
+        if not check_column_validity(column) and column is not None:
+            return False
+    for column in unique_columns:
+        if not check_column_validity(column) and column is not None:
+            return False
+    if not check_table_validity(table):
+        return False
+    else:
+        return True
+
+
 # Gets a specific piece of data using a reference column and a reference value.
 def get_specific_data(table, column, unique_value, unique_column):
-    if check_table_validity(table) and check_column_validity(column) and check_column_validity(unique_column):
+    if sql_inj_prevention(table, (column,), (unique_column,)):
         query = sql.SQL("SELECT {column} FROM {table} WHERE {unique_column} = %s;").format(table=sql.Identifier(table), column=sql.Identifier(column), unique_column=sql.Identifier(unique_column))
         cur.execute(query, (unique_value,))
         data = cur.fetchone()
@@ -101,100 +116,80 @@ def get_specific_data(table, column, unique_value, unique_column):
 
 
 def get_many_by_singular(table, columns, unique_value, unique_column):
-    for column in columns:
-        if not check_column_validity(column):
-            raise ValueError
-    if not check_table_validity(table) or not check_column_validity(unique_column):
+    if sql_inj_prevention(table, columns, (unique_column,)):
+        col = sql.SQL(", ").join(sql.Identifier(elements) for elements in columns)
+        query = sql.SQL("SELECT ({columns}) FROM {table} WHERE {unique_column} = %s").format(table=sql.Identifier(table), columns=col, unique_column=sql.Identifier(unique_column))
+        execute_batch(cur, query, unique_value)
+        record_data = cur.fetchall()
+        return record_data
+    else:
         raise ValueError
-    col = sql.SQL(", ").join(sql.Identifier(elements) for elements in columns)
-    query = sql.SQL("SELECT ({columns}) FROM {table} WHERE {unique_column} = %s").format(table=sql.Identifier(table), columns=col, unique_column=sql.Identifier(unique_column))
-    cur.execute(query, (unique_value,))
-    record_data = cur.fetchall()
-    return record_data
 
 
 # Gets whatever is in a table that matches the columns and values.
 def get_dynamic_data(table, columns, values):
-    for column in columns:
-        if not check_column_validity(column):
-            raise ValueError
-    if not check_table_validity(table):
-        raise ValueError
-    else:
+    if sql_inj_prevention(table, columns, (None,)):
         col = sql.SQL(", ").join(sql.Identifier(elements) for elements in columns)
-        val = sql.SQL(", ").join(sql.Placeholder() for elements in range(len(columns)))
+        val = sql.SQL(", ").join(sql.Placeholder() for i in range(len(columns)))
         query = sql.SQL("SELECT ({columns}) FROM {table} WHERE ({columns}) = ({values})").format(table=sql.Identifier(table), columns=col, values=val)
         execute_batch(cur, query, values)
         record_data = cur.fetchmany(size=len(columns))
         return record_data
+    else:
+        raise ValueError
 
 
 # Gets one value from one column from the table that matches the columns and values.
 def get_singular_by_many(table, columns, values, singular_column):
-    for column in columns:
-        if not check_column_validity(column):
-            raise ValueError
-    if not check_table_validity(table):
-        raise ValueError
-    else:
+    if sql_inj_prevention(table, columns, (singular_column,)):
         col = sql.SQL(", ").join(sql.Identifier(elements) for elements in columns)
-        val = sql.SQL(", ").join(sql.Placeholder() for elements in range(len(columns)))
+        val = sql.SQL(", ").join(sql.Placeholder() for i in range(len(columns)))
         query = sql.SQL("SELECT ({singular_column}) FROM {table} WHERE ({columns}) = ({values})").format(table=sql.Identifier(table), columns=col, values=val, singular_column=sql.Identifier(singular_column))
         execute_batch(cur, query, values)
         record_data = cur.fetchone()
         return record_data
+    else:
+        raise ValueError
 
 
 def get_many_by_many(table, columns, values, target_column):
-    for column in columns:
-        if not check_column_validity(column):
-            raise ValueError
-    if not check_table_validity(table) or not check_column_validity(target_column):
-        raise ValueError
-    else:
+    if sql_inj_prevention(table, columns, (target_column,)):
         col = sql.SQL(", ").join(sql.Identifier(elements) for elements in columns)
-        val = sql.SQL(", ").join(sql.Placeholder() for elements in range(len(columns)))
-        query = sql.SQL("SELECT ({target_column}) FROM {table} WHERE ({columns}) = ({values})").format(table=sql.Identifier(table), columns=col, values=val, target_column=sql.Identifier(target_column))
+        val = sql.SQL(", ").join(sql.Placeholder() for i in range(len(columns)))
+        query = sql.SQL("SELECT ({target_column}) FROM {table} WHERE ({columns}) = ({values})").format(table=sql.Identifier(table), columns=col, target_column=sql.Identifier(target_column), values=val)
         execute_batch(cur, query, values)
         record_data = cur.fetchall()
         return record_data
+    else:
+        raise ValueError
 
 
 def get_column_by_value(table, check_column, target_column, check_value):
-    if check_table_validity(table) and check_column_validity(check_column) and check_column_validity(target_column):
+    if sql_inj_prevention(table, (check_column,), (target_column,)):
         query = sql.SQL("SELECT {target_column} FROM {table} WHERE {check_column} = %s").format(table=sql.Identifier(table), check_column=sql.Identifier(check_column), target_column=sql.Identifier(target_column))
-        print(query.as_string(conn))
         cur.execute(query, (check_value,))
         record_data = cur.fetchall()
-        print(record_data)
         return record_data
     else:
         raise ValueError
 
 
 def get_data_by_column_value(table, columns, unique_values, unique_columns):
-    for column in columns:
-        if not check_column_validity(column):
-            raise ValueError
-    for column in unique_columns:
-        if not check_column_validity(column):
-            raise ValueError
-    if not check_table_validity(table):
-        raise ValueError
-    else:
-        col = sql.SQL(", ").join(sql.Identifier(elements) for elements in columns)
-        uni_col = sql.SQL(", ").join(sql.Identifier(elements) for elements in unique_columns)
-        val = sql.SQL(", ").join(sql.Placeholder() for elements in range(len(unique_columns)))
-        query = sql.SQL("SELECT ({columns}) FROM {table} WHERE ({unique_columns}) = ({unique_values})").format(table=sql.Identifier(table), columns=col, unique_columns=uni_col, unique_values=val)
+    if sql_inj_prevention(table, columns, unique_columns):
+        col = sql.SQL(", ").join(sql.Identifier(column) for column in columns)
+        uni_col = sql.SQL(", ").join(sql.Identifier(column) for column in unique_columns)
+        val = sql.SQL(", ").join(sql.Placeholder() for column in unique_columns)
+        query = sql.SQL("SELECT ({columns}) FROM {table} WHERE ({unique_columns}) = ({values})").format(table=sql.Identifier(table), columns=col, unique_columns=uni_col, values=val)
         execute_batch(cur, query, unique_values)
-        record_data = cur.fetchmany()
-        print(record_data)
+        record_data = cur.fetchone()
         return record_data
+    else:
+        raise ValueError
 
 
 # Gets all data in a column where it is equal to a value.
 def get_data_by_value(table, column, value):
-    if check_table_validity(table) and check_column_validity(column):
+    if sql_inj_prevention(table, (column,), (None,)):
         query = sql.SQL("SELECT * FROM {table} WHERE {unique_column} = %s;").format(table=sql.Identifier(table), unique_column=sql.Identifier(column))
         cur.execute(query, (value,))
         data = cur.fetchall()
@@ -205,7 +200,7 @@ def get_data_by_value(table, column, value):
 
 # Gets all the data in a column.
 def get_all_data_in_column(table, column):
-    if check_table_validity(table) and check_column_validity(column):
+    if sql_inj_prevention(table, (column,), (None,)):
         query = sql.SQL("SELECT {column} FROM {table};").format(table=sql.Identifier(table), column=sql.Identifier(column))
         cur.execute(query)
         data = cur.fetchall()
@@ -216,7 +211,7 @@ def get_all_data_in_column(table, column):
 
 # Gets all the data from a table.
 def get_all_data_in_table(table):
-    if check_table_validity(table):
+    if sql_inj_prevention(table, (None,), (None,)):
         query = sql.SQL("SELECT * FROM {table};").format(table=sql.Identifier(table))
         cur.execute(query)
         data = cur.fetchall()
@@ -227,95 +222,71 @@ def get_all_data_in_table(table):
 
 # Inserts a singular value to a column in a table.
 def insert_specific_data(table, column, value):
-    if check_table_validity(table) and check_column_validity(column):
+    if sql_inj_prevention(table, (column,), (None,)):
         query = sql.SQL("INSERT INTO {table} ({column}) VALUES (%s);").format(table=sql.Identifier(table), column=sql.Identifier(column))
         cur.execute(query, (value,))
         conn.commit()
-    else:
-        raise ValueError
 
 
 # Inserts multiple columns and values in a table.
 def insert_many_data(table, columns, values):
-    for column in columns:
-        if not check_column_validity(column):
-            raise ValueError
-    if not check_table_validity(table):
-        raise ValueError
-    else:
-        col = sql.SQL(", ").join(sql.Identifier(elements) for elements in columns)
-        val = sql.SQL(", ").join(sql.Placeholder() for elements in range(len(columns)))
+    if sql_inj_prevention(table, columns, (None,)):
+        col = sql.SQL(", ").join(sql.Identifier(column) for column in columns)
+        val = sql.SQL(", ").join(sql.Placeholder() for column in columns)
         query = sql.SQL("INSERT INTO {table} ({columns}) VALUES ({values})").format(table=sql.Identifier(table), columns=col, values=val)
+        # ISSUE HERE -> SQL DOES NOT AUTOMATICALLY ADD QUOTATION MARKS, SPECIFICALLY WHEN THERE ARE NO SPACES.
+        # CAUSES MASSIVE ISSUE IN THE CASE WHERE THERE IS NO SPACES.
         execute_batch(cur, query, values)
         conn.commit()
 
 
 # Updates a specific columns value when it matches a reference value and reference column.
 def update_specific_data(table, column, value, unique_value, unique_column):
-    if check_table_validity(table) and check_column_validity(column) and check_column_validity(unique_column):
+    if sql_inj_prevention(table, (column,), (unique_column,)):
         query = sql.SQL("UPDATE {table} SET {column} = %s WHERE {unique_column} = %s;").format(table=sql.Identifier(table), column=sql.Identifier(column), unique_column=sql.Identifier(unique_column))
         cur.execute(query, (value, unique_value))
         conn.commit()
-    else:
-        raise ValueError
 
 
 # Updates one specific column's value if it matches reference values and columns.
-# However, it is quite rudimentary and requires specific formatting to work in this instance.
-# Needs to be refactored in the future.
 def update_singular_by_many(table, columns, values, unique_column):
-    for column in columns:
-        if not check_column_validity(column):
-            raise ValueError
-    if not check_table_validity(table):
-        raise ValueError
-    else:
-        col = sql.SQL(", ").join(sql.Identifier(elements) for elements in columns)
-        val = sql.SQL(", ").join(sql.Placeholder() for elements in range(len(columns)))
-        query = sql.SQL("UPDATE {table} SET {unique_column} = %s WHERE ({columns}) = ({values})").format(table=sql.Identifier(table), columns=col, values=val, unique_column=sql.Identifier(unique_column))
+    if sql_inj_prevention(table, columns, (unique_column,)):
+        col = sql.SQL(", ").join(sql.Identifier(column) for column in columns)
+        val = sql.SQL(", ").join(sql.Placeholder() for column in columns)
+        query = sql.SQL("UPDATE {table} SET {unique_column} = %s WHERE ({columns}) = ({values})").format(table=sql.Identifier(table), columns=col, unique_column=sql.Identifier(unique_column), values=val)
         execute_batch(cur, query, values)
         conn.commit()
 
 
 # Resets a columns value in a table if it matches a reference value and column.
 def reset_specific_data(table, column, unique_value, unique_column):
-    if check_table_validity(table) and check_column_validity(column) and check_column_validity(unique_column):
+    if sql_inj_prevention(table, (column,), (unique_column,)):
         query = sql.SQL("UPDATE {table} SET {column} = DEFAULT WHERE {unique_column} = %s;").format(table=sql.Identifier(table), column=sql.Identifier(column), unique_column=sql.Identifier(unique_column))
         cur.execute(query, (unique_value,))
         conn.commit()
-    else:
-        raise ValueError
+
 
 # Resets multiple column values when it matches a reference value and column.
 def reset_column(table, column):
-    if check_table_validity(table) and check_column_validity(column):
+    if sql_inj_prevention(table, (column,), (None,)):
         query = sql.SQL("UPDATE {table} SET {column} = DEFAULT;").format(table=sql.Identifier(table), column=sql.Identifier(column))
         cur.execute(query)
         conn.commit()
-    else:
-        raise ValueError
 
 
 # Deletes a specific piece of data from a specific column.
 def delete_specific_data(table, unique_value, unique_column):
-    if check_table_validity(table) and check_column_validity(unique_column):
+    if sql_inj_prevention(table, (None,), (unique_column,)):
         query = sql.SQL("DELETE FROM {table} WHERE {unique_column} = %s;").format(table=sql.Identifier(table), unique_column=sql.Identifier(unique_column))
         cur.execute(query, (unique_value,))
         conn.commit()
-    else:
-        raise ValueError
 
 
 # Deletes specifically where the reference values equal the reference columns in a table.
 def delete_dynamic_data(table, columns, values):
-    for column in columns:
-        if not check_column_validity(column):
-            raise ValueError
-    if not check_table_validity(table):
-        raise ValueError
-    else:
+    if sql_inj_prevention(table, columns, (None,)):
         col = sql.SQL(", ").join(sql.Identifier(elements) for elements in columns)
-        val = sql.SQL(", ").join(sql.Placeholder() for elements in range(len(columns)))
+        val = sql.SQL(", ").join(sql.Placeholder() for i in range(len(columns)))
         query = sql.SQL("DELETE FROM {table} WHERE ({columns}) = ({values})").format(table=sql.Identifier(table), columns=col, values=val)
         execute_batch(cur, query, values)
         conn.commit()
@@ -323,7 +294,7 @@ def delete_dynamic_data(table, columns, values):
 
 # Checks if a specific column and value exist.
 def check_existence(table, column, value):
-    if check_table_validity(table) and check_column_validity(column):
+    if sql_inj_prevention(table, (column,), (None,)):
         query = sql.SQL("SELECT * FROM {table} WHERE EXISTS (SELECT {column} FROM {table} WHERE {column} = %s);").format(table=sql.Identifier(table), column=sql.Identifier(column))
         cur.execute(query, (value,))
         data = cur.fetchone()
