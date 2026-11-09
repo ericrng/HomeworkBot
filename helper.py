@@ -38,6 +38,7 @@ def datetime_check(due_date):
     except ValueError:
         return None
 
+
 def check_add_hw_parameter():
     pass
 
@@ -65,5 +66,23 @@ def insert_periods(start, end):
         return False
     else:
         for i in range(start, end+1):
-            check_single_insert("homework_data", "class_period", i)
+            if check_single_insert("valid_periods", "class_period", i):
+                pass
         return True
+
+
+# Checks if the index of data (typically, the number of data you have implies a certain number of embed fields) is equal to the embed limit, which is variable.
+def embed_lim_check(embed_limit, num_of_data, data):
+    if (num_of_data + 1) % embed_limit == 0:
+        return True
+    elif (num_of_data + 1) == len(data):
+        return True
+    else:
+        return False
+
+
+def whitelist_check(whitelist, data):
+    if data == whitelist:
+        return True
+    else:
+        return False

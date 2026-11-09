@@ -6,14 +6,14 @@ from psycopg2 import sql
 
 load_dotenv(override=True)
 # IF YOU ARE NOT USING A DATABASE URL
-# DB_NAME = str(os.getenv("DB_NAME"))
-# PASSWORD = str(os.getenv("PASSWORD"))
-# USERNAME = str(os.getenv("USERNAME"))
-# HOST = str(os.getenv("HOST"))
+DB_NAME = str(os.getenv("DB_NAME"))
+PASSWORD = str(os.getenv("PASSWORD"))
+USERNAME = str(os.getenv("USERNAME"))
+HOST = str(os.getenv("HOST"))
 DB_URL = str(os.getenv("DB_URL"))
-conn = psycopg2.connect(DB_URL)
+conn = psycopg2.connect(dbname=DB_NAME, user=USERNAME, password=PASSWORD, host=HOST)
 cur = conn.cursor()
-dict_cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+real_dict_cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
 
 # Need to check against to prevent SQL injections.
@@ -119,7 +119,7 @@ def get_many_by_singular(table, columns, unique_value, unique_column):
     if sql_inj_prevention(table, columns, (unique_column,)):
         col = sql.SQL(", ").join(sql.Identifier(elements) for elements in columns)
         query = sql.SQL("SELECT ({columns}) FROM {table} WHERE {unique_column} = %s").format(table=sql.Identifier(table), columns=col, unique_column=sql.Identifier(unique_column))
-        execute_batch(cur, query, unique_value)
+        cur.execute(query, (unique_value,))
         record_data = cur.fetchall()
         return record_data
     else:
@@ -132,7 +132,7 @@ def get_dynamic_data(table, columns, values):
         col = sql.SQL(", ").join(sql.Identifier(elements) for elements in columns)
         val = sql.SQL(", ").join(sql.Placeholder() for i in range(len(columns)))
         query = sql.SQL("SELECT ({columns}) FROM {table} WHERE ({columns}) = ({values})").format(table=sql.Identifier(table), columns=col, values=val)
-        execute_batch(cur, query, values)
+        cur.execute(query, values)
         record_data = cur.fetchmany(size=len(columns))
         return record_data
     else:
@@ -145,7 +145,7 @@ def get_singular_by_many(table, columns, values, singular_column):
         col = sql.SQL(", ").join(sql.Identifier(elements) for elements in columns)
         val = sql.SQL(", ").join(sql.Placeholder() for i in range(len(columns)))
         query = sql.SQL("SELECT ({singular_column}) FROM {table} WHERE ({columns}) = ({values})").format(table=sql.Identifier(table), columns=col, values=val, singular_column=sql.Identifier(singular_column))
-        execute_batch(cur, query, values)
+        cur.execute(query, values)
         record_data = cur.fetchone()
         return record_data
     else:
@@ -157,7 +157,7 @@ def get_many_by_many(table, columns, values, target_column):
         col = sql.SQL(", ").join(sql.Identifier(elements) for elements in columns)
         val = sql.SQL(", ").join(sql.Placeholder() for i in range(len(columns)))
         query = sql.SQL("SELECT ({target_column}) FROM {table} WHERE ({columns}) = ({values})").format(table=sql.Identifier(table), columns=col, target_column=sql.Identifier(target_column), values=val)
-        execute_batch(cur, query, values)
+        cur.execute(query, values)
         record_data = cur.fetchall()
         return record_data
     else:
@@ -179,8 +179,8 @@ def get_data_by_column_value(table, columns, unique_values, unique_columns):
         col = sql.SQL(", ").join(sql.Identifier(column) for column in columns)
         uni_col = sql.SQL(", ").join(sql.Identifier(column) for column in unique_columns)
         val = sql.SQL(", ").join(sql.Placeholder() for column in unique_columns)
-        query = sql.SQL("SELECT ({columns}) FROM {table} WHERE ({unique_columns}) = ({values})").format(table=sql.Identifier(table), columns=col, unique_columns=uni_col, values=val)
-        execute_batch(cur, query, unique_values)
+        query = sql.SQL("SELECT {columns} FROM {table} WHERE ({unique_columns}) = ({values})").format(table=sql.Identifier(table), columns=col, unique_columns=uni_col, values=val)
+        cur.execute(query, unique_values)
         record_data = cur.fetchone()
         return record_data
     else:
@@ -193,6 +193,16 @@ def get_data_by_value(table, column, value):
         query = sql.SQL("SELECT * FROM {table} WHERE {unique_column} = %s;").format(table=sql.Identifier(table), unique_column=sql.Identifier(column))
         cur.execute(query, (value,))
         data = cur.fetchall()
+        return data
+    else:
+        raise ValueError
+
+
+def dict_get_data_by_value(table, column, value):
+    if sql_inj_prevention(table, (column,), (None,)):
+        query = sql.SQL("SELECT * FROM {table} WHERE {unique_column} = %s;").format(table=sql.Identifier(table), unique_column=sql.Identifier(column))
+        real_dict_cur.execute(query, (value,))
+        data = real_dict_cur.fetchall()
         return data
     else:
         raise ValueError
@@ -234,9 +244,7 @@ def insert_many_data(table, columns, values):
         col = sql.SQL(", ").join(sql.Identifier(column) for column in columns)
         val = sql.SQL(", ").join(sql.Placeholder() for column in columns)
         query = sql.SQL("INSERT INTO {table} ({columns}) VALUES ({values})").format(table=sql.Identifier(table), columns=col, values=val)
-        # ISSUE HERE -> SQL DOES NOT AUTOMATICALLY ADD QUOTATION MARKS, SPECIFICALLY WHEN THERE ARE NO SPACES.
-        # CAUSES MASSIVE ISSUE IN THE CASE WHERE THERE IS NO SPACES.
-        execute_batch(cur, query, values)
+        cur.execute(query, values)
         conn.commit()
 
 
@@ -254,7 +262,7 @@ def update_singular_by_many(table, columns, values, unique_column):
         col = sql.SQL(", ").join(sql.Identifier(column) for column in columns)
         val = sql.SQL(", ").join(sql.Placeholder() for column in columns)
         query = sql.SQL("UPDATE {table} SET {unique_column} = %s WHERE ({columns}) = ({values})").format(table=sql.Identifier(table), columns=col, unique_column=sql.Identifier(unique_column), values=val)
-        execute_batch(cur, query, values)
+        cur.execute(query, values)
         conn.commit()
 
 
@@ -288,7 +296,7 @@ def delete_dynamic_data(table, columns, values):
         col = sql.SQL(", ").join(sql.Identifier(elements) for elements in columns)
         val = sql.SQL(", ").join(sql.Placeholder() for i in range(len(columns)))
         query = sql.SQL("DELETE FROM {table} WHERE ({columns}) = ({values})").format(table=sql.Identifier(table), columns=col, values=val)
-        execute_batch(cur, query, values)
+        cur.execute(query, values)
         conn.commit()
 
 
