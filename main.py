@@ -1,8 +1,7 @@
 import discord
 import os
-import ast
 from discord.ext import commands
-from discord import app_commands, SelectOption
+from discord import app_commands
 from dotenv import load_dotenv
 from db import get_all_data_in_column, get_all_data_in_table, \
     update_specific_data, connect_db, insert_many_data, \
@@ -187,7 +186,6 @@ async def add_homework(interaction, homework_name: str, class_name: str, class_t
             return
     # Checks if it is a real period, class, or teacher.
     if formatted_periods not in valid_periods or formatted_classes not in valid_classes or formatted_teachers not in valid_teachers:
-        print(valid_periods, valid_classes, valid_teachers)
         await interaction.response.send_message(content="The parameters of this homework are not valid!", ephemeral=True)
         return
     # Checks if the homework already exists (in which case we ignore.)
