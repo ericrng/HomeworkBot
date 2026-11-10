@@ -4,11 +4,13 @@ from discord.ext import commands
 from discord import app_commands
 from dotenv import load_dotenv
 from db import get_all_data_in_column, get_all_data_in_table, \
-    update_specific_data, connect_db, insert_many_data, \
+    connect_db, insert_many_data, \
     get_dynamic_data, delete_dynamic_data, get_singular_by_many, update_singular_by_many, \
     get_many_by_many, get_data_by_column_value, dict_get_data_by_value
-from helper import get_settings, auto_delete_function, auto_sync_function, insert_periods, check_single_insert, check_single_delete, datetime_check, embed_lim_check, whitelist_check
-from misc import help_options, option_description
+from helper import get_settings, auto_delete_function, auto_sync_function, insert_periods, \
+                    check_single_insert, check_single_delete, datetime_check, embed_lim_check, whitelist_check
+from interactive import Settings, HelpMenu
+
 
 connect_db()
 load_dotenv()
@@ -19,45 +21,6 @@ bot = commands.Bot(command_prefix="/", intents=intents)
 tree = app_commands.CommandTree(client)
 WHITELIST = int(os.getenv("AUTHORIZED_USER"))
 DISCORD_TOKEN = str(os.getenv("DISCORD_TOKEN"))
-
-
-class Settings(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=30)
-    @discord.ui.button(label="Change Auto-Sync", style=discord.ButtonStyle.blurple)
-    async def change_auto_sync(self, interaction, button):
-        current_sync_settings = get_settings(interaction.user.id)[0]
-        update_specific_data("user_settings", "auto_sync", not current_sync_settings, interaction.user.id, "user_id")
-        await interaction.response.send_message(content="Successfully changed sync settings.", ephemeral=True)
-    @discord.ui.button(label="Change Auto-Delete", style=discord.ButtonStyle.blurple)
-    async def change_auto_delete(self, interaction, button):
-        current_delete_settings = get_settings(interaction.user.id)[1]
-        update_specific_data("user_settings", "auto_delete", not current_delete_settings, interaction.user.id, "user_id")
-        await interaction.response.send_message(content="Successfully changed delete settings.", ephemeral=True)
-    @discord.ui.button(label="Change Visibility Settings", style=discord.ButtonStyle.blurple)
-    async def change_visibility_settings(self, interaction, button):
-        current_visibility_settings = get_settings(interaction.user.id)[2]
-        update_specific_data("user_settings", "visible_homework", not current_visibility_settings, interaction.user.id, "user_id")
-        await interaction.response.send_message(content="Successfully changed visibility settings.", ephemeral=True)
-
-
-class HelpOptions(discord.ui.Select):
-    def __init__(self):
-        options = []
-        for option in help_options:
-            options.append(discord.SelectOption(label=option, description=option_description[option]))
-        super().__init__(placeholder="What command do you need help with?", min_values=1, max_values=1, options=options)
-
-    async def callback(self, interaction):
-        embed = discord.Embed(title=f"What is {self.values[0]}?", color=discord.Color.blurple())
-        embed.add_field(name="\u200b", value=help_options[self.values[0]])
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
-class HelpMenu(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=180)
-        self.add_item(HelpOptions())
 
 
 @client.event
@@ -86,7 +49,7 @@ async def show_class_periods(interaction):
     embed = discord.Embed(title="All class periods:", color=discord.Color.green())
     for period in periods:
         embed.add_field(name=f"Period {period[0]}", value="\u200b", inline=False)
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=get_settings(interaction.user.id)[2])
 
 
 @tree.command(name="insert_class_names", description="Insert valid class names.")
@@ -107,7 +70,7 @@ async def show_class_names(interaction):
     embed = discord.Embed(title="All class names:", color=discord.Color.red())
     for class_name in class_names:
         embed.add_field(name=f"{class_name[1]}", value="\u200b", inline=False)
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=get_settings(interaction.user.id)[2])
 
 
 @tree.command(name="insert_teacher_names", description="Insert valid teacher names.")
@@ -128,7 +91,7 @@ async def show_teacher_names(interaction):
     embed = discord.Embed(title="All teacher names:", color=discord.Color.blue())
     for teacher_name in teacher_names:
         embed.add_field(name=f"{teacher_name[1]}", value="\u200b", inline=False)
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=get_settings(interaction.user.id)[2])
 
 
 @tree.command(name="remove_teacher_names", description="Remove valid teacher names.")
@@ -213,7 +176,7 @@ async def show_homework(interaction):
     # Checks if any homeworks exist.
     await interaction.response.defer()
     if not data:
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=get_settings(interaction.user.id)[2])
     index = 0
     for value in data:
         emoji = "❌" if value["homework_status"] is False else "✅"
@@ -230,7 +193,7 @@ async def show_homework(interaction):
         index += 1
     # Sends the list of embeds.
     for embeds in embed_list:
-        await interaction.followup.send(embed=embeds)
+        await interaction.followup.send(embed=embeds, ephemeral=get_settings(interaction.user.id)[2])
 
 
 @tree.command(name="remove_homework", description="Removes a homework from your to-do list!")
@@ -274,7 +237,7 @@ async def info(interaction):
     embed.add_field(name="Admin Commands", value="There are currently 6 admin commands and they allow whomever is hosting this bot to **modify the valid periods, valid classes, and valid teacher names**.", inline=False)
     embed.add_field(name="Homework Commands", value="There are 7 rudimentary homework commands: **add, remove, show, and change status**. These can be used by **anyone** (though for the show command, it currently only **supports 3 homeworks**.)", inline=False)
     embed.add_field(name="Future Commands", value="HomeworkBot is still **under development** (therefore **bugs should be expected**) and new commands will be added such as the ability to **sync your to-do lists** with others.", inline=False)
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # Shows settings in an embed.
@@ -285,7 +248,7 @@ async def settings(interaction):
     embed.add_field(name="Auto Sync:", value=auto_sync, inline=True)
     embed.add_field(name="Auto Delete:", value=auto_delete, inline=True)
     embed.add_field(name="Visible Homework:", value=visible_homework, inline=True)
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=get_settings(interaction.user.id)[2])
 
 
 # Outputs buttons to click to change settings.
@@ -322,7 +285,7 @@ async def show_schedule(interaction):
             embed.add_field(name="Period:", value=class_period, inline=True)
             embed.add_field(name="Teacher:", value=class_teacher, inline=True)
             embed.add_field(name="Class:", value=class_name, inline=True)
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=get_settings(interaction.user.id)[2])
 
 
 @tree.command(name="remove_from_schedule", description="Remove your schedule from HomeworkBot!")
