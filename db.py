@@ -6,12 +6,12 @@ from psycopg2 import sql
 
 load_dotenv(override=True)
 # IF YOU ARE NOT USING A DATABASE URL
-# DB_NAME = str(os.getenv("DB_NAME"))
-# PASSWORD = str(os.getenv("PASSWORD"))
-# USERNAME = str(os.getenv("USERNAME"))
-# HOST = str(os.getenv("HOST"))
+DB_NAME = str(os.getenv("DB_NAME"))
+PASSWORD = str(os.getenv("PASSWORD"))
+USERNAME = str(os.getenv("USERNAME"))
+HOST = str(os.getenv("HOST"))
 DB_URL = str(os.getenv("DB_URL"))
-conn = psycopg2.connect(DB_URL)
+conn = psycopg2.connect(dbname=DB_NAME, user=USERNAME, password=PASSWORD, host=HOST)
 cur = conn.cursor()
 real_dict_cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
@@ -225,6 +225,16 @@ def get_all_data_in_table(table):
         query = sql.SQL("SELECT * FROM {table};").format(table=sql.Identifier(table))
         cur.execute(query)
         data = cur.fetchall()
+        return data
+    else:
+        raise ValueError
+
+
+def dict_get_all_data_in_table(table):
+    if sql_inj_prevention(table, (None,), (None,)):
+        query = sql.SQL("SELECT * FROM {table};").format(table=sql.Identifier(table))
+        real_dict_cur.execute(query)
+        data = real_dict_cur.fetchall()
         return data
     else:
         raise ValueError

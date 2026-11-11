@@ -1,15 +1,16 @@
 import discord
 import os
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
 from dotenv import load_dotenv
 from db import get_all_data_in_column, get_all_data_in_table, \
     connect_db, insert_many_data, \
     get_dynamic_data, delete_dynamic_data, get_singular_by_many, update_singular_by_many, \
-    get_many_by_many, get_data_by_column_value, dict_get_data_by_value
+    get_many_by_many, get_data_by_column_value, dict_get_data_by_value, dict_get_all_data_in_table
 from helper import get_settings, auto_delete_function, auto_sync_function, insert_periods, \
                     check_single_insert, check_single_delete, datetime_check, embed_lim_check, whitelist_check
 from interactive import Settings, HelpMenu
+from datetime import datetime as dt
 
 
 connect_db()
@@ -28,6 +29,9 @@ async def on_ready():
     print(f"We have logged in as {client.user}!")
     await tree.sync()
     print("We have synced commands!")
+    # Currently not running until DM setting is finished.
+    # if not timer.is_running():
+    #     timer.start()
 
 
 # Allows for owner to set parameters for periods.
@@ -308,6 +312,20 @@ async def remove_schedule(interaction, class_period: int):
 @tree.command(name="help", description="Provides information on commands!")
 async def get_help(interaction):
     await interaction.response.send_message(view=HelpMenu(), ephemeral=True)
+
+
+# Loop for sending DMs when homework is not done.
+@tasks.loop(hours=24)
+async def timer():
+    for value in dict_get_all_data_in_table("homework_data"):
+        time = dt.now()
+        times = dt.strptime(value["due_date"], "%m/%d/%Y")
+        if time.month == times.month and time.day == times.day and time.year == times.year:
+            if not value["homework_status"]:
+                user = await client.fetch_user(value["user_id"])
+                await user.send(f"Your homework {value["homework_name"]} is due!")
+        else:
+            pass
 
 
 client.run(DISCORD_TOKEN)
