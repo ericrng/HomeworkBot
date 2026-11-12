@@ -6,19 +6,19 @@ from psycopg2 import sql
 
 load_dotenv(override=True)
 # IF YOU ARE NOT USING A DATABASE URL
-DB_NAME = str(os.getenv("DB_NAME"))
-PASSWORD = str(os.getenv("PASSWORD"))
-USERNAME = str(os.getenv("USERNAME"))
-HOST = str(os.getenv("HOST"))
+# DB_NAME = str(os.getenv("DB_NAME"))
+# PASSWORD = str(os.getenv("PASSWORD"))
+# USERNAME = str(os.getenv("USERNAME"))
+# HOST = str(os.getenv("HOST"))
 DB_URL = str(os.getenv("DB_URL"))
-conn = psycopg2.connect(dbname=DB_NAME, user=USERNAME, password=PASSWORD, host=HOST)
+conn = psycopg2.connect(DB_URL)
 cur = conn.cursor()
 real_dict_cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
 
 # Need to check against to prevent SQL injections.
 VALID_TABLES = {"user_data", "homework_data", "valid_periods", "valid_names", "valid_teachers", "user_settings"}
-VALID_COLUMNS = {"user_id", "class_name", "class_period", "class_teacher", "homework_name", "homework_status", "due_date", "auto_sync", "auto_delete", "visible_homework", "class_teacher_id", "class_name_id"}
+VALID_COLUMNS = {"user_id", "class_name", "class_period", "class_teacher", "homework_name", "homework_status", "due_date", "auto_sync", "auto_delete", "auto_dm", "visible_homework", "class_teacher_id", "class_name_id"}
 
 
 # Structure for future use.
@@ -47,7 +47,8 @@ cur.execute("""CREATE TABLE IF NOT EXISTS user_settings (
                user_id BIGINT PRIMARY KEY,
                auto_sync BOOLEAN DEFAULT FALSE,
                auto_delete BOOLEAN DEFAULT FALSE,
-               visible_homework BOOLEAN DEFAULT FALSE
+               visible_homework BOOLEAN DEFAULT FALSE,
+               auto_dm BOOLEAN DEFAULT FALSE
                );""")
 
 cur.execute("""CREATE TABLE IF NOT EXISTS valid_periods (

@@ -37,3 +37,15 @@ option_description = {"/insert_class_periods": "Admin Command",
                       "/insert_into_schedule": "Sync Command",
                       "/remove_from_schedule": "Sync Command"
                       }
+
+feature_description = {"Auto-Sync": None,
+                   "Auto-Delete": None,
+                   "Homework Visibility": None,
+                   "Auto-DM": None
+}
+
+feature_options = {"Auto-Sync": "When on, automatically updates your to-do list whenever someone with the same schedule adds a homework.",
+                       "Auto-Delete": "When on, automatically deletes past homework from your to-do list.",
+                       "Homework Visibility": "When on, makes all outputs from HomeworkBot ephemeral.",
+                       "Auto-DM": "When on, automatically sends DMs when you have past due homework that is not complete."
+}

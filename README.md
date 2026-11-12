@@ -36,6 +36,8 @@ Settings are viewable via /settings and changeable /change_setings. (All setting
 - #### Visibility Settings:
    > Visibility Settings changes the ephemeral status of certain messages.
    > It does not change the ephemeral status for non-show commands except for settings.
+- #### Auto-DM:
+    > DMs you whenever a homework is past due if the setting is on. 
 ## Future Functions
 HomeworkBot is a WIP. Features will be added as suggestions come in and changes to the codebase will be done as well.
 ### Planned Features  

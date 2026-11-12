@@ -1,16 +1,16 @@
 import discord
 import os
-from discord.ext import commands, tasks
+from discord.ext import commands
 from discord import app_commands
 from dotenv import load_dotenv
 from db import get_all_data_in_column, get_all_data_in_table, \
     connect_db, insert_many_data, \
     get_dynamic_data, delete_dynamic_data, get_singular_by_many, update_singular_by_many, \
-    get_many_by_many, get_data_by_column_value, dict_get_data_by_value, dict_get_all_data_in_table
+    get_many_by_many, get_data_by_column_value, dict_get_data_by_value
 from helper import get_settings, auto_delete_function, auto_sync_function, insert_periods, \
-                    check_single_insert, check_single_delete, datetime_check, embed_lim_check, whitelist_check
-from interactive import Settings, HelpMenu
-from datetime import datetime as dt
+                    embed_lim_check, whitelist_check, check_add_hw_parameter, dynamic_insert_delete
+from interactive import Settings, HelpMenu, FeatureMenu, timer
+
 
 
 connect_db()
@@ -29,9 +29,9 @@ async def on_ready():
     print(f"We have logged in as {client.user}!")
     await tree.sync()
     print("We have synced commands!")
-    # Currently not running until DM setting is finished.
-    # if not timer.is_running():
-    #     timer.start()
+    # To initialize the task.
+    if not timer.is_running():
+        timer.start(client)
 
 
 # Allows for owner to set parameters for periods.
@@ -59,13 +59,8 @@ async def show_class_periods(interaction):
 @tree.command(name="insert_class_names", description="Insert valid class names.")
 @app_commands.describe(class_name="What is the name of the class?")
 async def insert_class_name(interaction, class_name: str):
-    if whitelist_check(WHITELIST, interaction.user.id):
-        if check_single_insert("valid_names", "class_name", class_name):
-            await interaction.response.send_message(f"Successfully inserted class {class_name}!", ephemeral=True)
-        else:
-            await interaction.response.send_message(content="Class name already exists!", ephemeral=True)
-    else:
-        await interaction.response.send_message(content="You do not have permission to use this command.", ephermeral=True)
+    msg = dynamic_insert_delete(whitelist_check(WHITELIST, interaction.user.id), "insert", "valid_names", "class_name", class_name)
+    await interaction.response.send_message(content=msg, ephemeral=True)
 
 
 @tree.command(name="show_class_names", description="Gives you a list of all valid class names.")
@@ -80,13 +75,8 @@ async def show_class_names(interaction):
 @tree.command(name="insert_teacher_names", description="Insert valid teacher names.")
 @app_commands.describe(teacher_name="What is the name of the teacher?")
 async def insert_teacher_name(interaction, teacher_name: str):
-    if whitelist_check(WHITELIST, interaction.user.id):
-        if check_single_insert("valid_teachers", "class_teacher", teacher_name):
-            await interaction.response.send_message(content="Successfully inserted teacher name!", ephemeral=True)
-        else:
-            await interaction.response.send_message(content="This teacher name already exists!", ephemeral=True)
-    else:
-        await interaction.response.send_message(content="You do not have permission to use this command.", ephemeral=True)
+    msg = dynamic_insert_delete(whitelist_check(WHITELIST, interaction.user.id), "insert", "valid_teachers", "class_teacher", teacher_name)
+    await interaction.response.send_message(content=msg, ephemeral=True)
 
 
 @tree.command(name="show_teacher_names", description="Gives you a list of all valid teacher names.")
@@ -101,37 +91,22 @@ async def show_teacher_names(interaction):
 @tree.command(name="remove_teacher_names", description="Remove valid teacher names.")
 @app_commands.describe(teacher_name="What is the name of the teacher?")
 async def remove_teacher_name(interaction, teacher_name: str):
-    if whitelist_check(WHITELIST, interaction.user.id):
-        if check_single_delete("valid_teachers", "class_teacher", teacher_name):
-            await interaction.response.send_message(content=f"Successfully deleted teacher name {teacher_name}!", ephemeral=True)
-        else:
-            await interaction.response.send_message(content="This teacher name does not exist!", ephemeral=True)
-    else:
-        await interaction.response.send_message(content="You do not have permission to use this command.", ephemeral=True)
+    msg = dynamic_insert_delete(whitelist_check(WHITELIST, interaction.user.id), "delete", "valid_teachers", "class_teacher", teacher_name)
+    await interaction.response.send_message(content=msg, ephemeral=True)
 
 
 @tree.command(name="remove_class_names", description="Remove valid class names.")
 @app_commands.describe(class_name="What is the name of the class?")
 async def remove_class_name(interaction, class_name: str):
-    if whitelist_check(WHITELIST, interaction.user.id):
-        if check_single_delete("valid_names", "class_name", class_name):
-            await interaction.response.send_message(content=f"Successfully deleted class name {class_name}!", ephemeral=True)
-        else:
-            await interaction.response.send_message(content="This class does not exist!", ephemeral=True)
-    else:
-        interaction.response.send_message(content="You do not have permission to use this command.", ephemeral=True)
+    msg = dynamic_insert_delete(whitelist_check(WHITELIST, interaction.user.id), "delete", "valid_names", "class_name", class_name)
+    await interaction.response.send_message(content=msg, ephemeral=True)
 
 
 @tree.command(name="remove_periods", description="Remove valid periods.")
 @app_commands.describe(period="What is the name of this period?")
 async def remove_periods(interaction, period: int):
-    if whitelist_check(WHITELIST, interaction.user.id):
-        if check_single_delete("valid_periods", "class_period", period):
-            await interaction.response.send_message(content=f"Successfully deleted period {period}!", ephemeral=True)
-        else:
-            await interaction.response.send_message(content="This period does not exist!", ephemeral=True)
-    else:
-        await interaction.response.send_message(content="You do not have permission to use this command.", ephemeral=True)
+    msg = dynamic_insert_delete(whitelist_check(WHITELIST, interaction.user.id), "delete", "valid_periods", "class_period", period)
+    await interaction.response.send_message(content=msg, ephemeral=True)
 
 
 @tree.command(name="add_homework", description="Adds a homework to your to-do list!")
@@ -139,36 +114,15 @@ async def remove_periods(interaction, period: int):
 async def add_homework(interaction, homework_name: str, class_name: str, class_teacher: str, period: int, due_date: str):
     data_columns = ("user_id", "homework_name", "class_name", "class_teacher", "class_period", "due_date")
     value_columns = (interaction.user.id, homework_name, class_name, class_teacher, period, due_date)
-    valid_periods, valid_classes, valid_teachers = get_all_data_in_table("valid_periods"), get_all_data_in_column("valid_names", "class_name"), get_all_data_in_column("valid_teachers", "class_teacher")
-    formatted_periods, formatted_classes, formatted_teachers = (period,), (class_name,), (class_teacher,)
-    # Checks if due date is before current date or ahead of current date.
-    match datetime_check(due_date):
-        case True:
-            pass
-        case False:
-            await interaction.response.send_message(content="You cannot have a due-date that is in the past!", ephemeral=True)
-            return
-        case None:
-            await interaction.response.send_message(content="Invalid due date format! *(Hint: m/d/yyyy)*", ephemeral=True)
-            return
-    # Checks if it is a real period, class, or teacher.
-    if formatted_periods not in valid_periods or formatted_classes not in valid_classes or formatted_teachers not in valid_teachers:
-        await interaction.response.send_message(content="The parameters of this homework are not valid!", ephemeral=True)
-        return
-    # Checks if the homework already exists (in which case we ignore.)
-    if get_dynamic_data("homework_data", data_columns, value_columns):
-        await interaction.response.send_message(content="This homework already exists!", ephemeral=True)
-    else:
+    msg, status = check_add_hw_parameter((period,), (class_name,), (class_teacher,), due_date, data_columns, value_columns)
+    if status:
         insert_many_data("homework_data", data_columns, value_columns)
-        # Get the user id's of people who have the same user data.
-        data_columns = ("class_period", "class_teacher", "class_name")
-        value_columns = (period, class_teacher, class_name)
         # Auto-Sync Feature
-        for users in get_many_by_many("user_data", data_columns, value_columns, "user_id"):
+        for users in get_many_by_many("user_data", ("class_period", "class_teacher", "class_name"), (period, class_teacher, class_name), "user_id"):
             # Indexing makes this harder to read.
             if users[0] != interaction.user.id:
                 auto_sync_function(get_settings(users[0])[0], ("user_id", "homework_name", "class_name", "class_teacher", "class_period", "due_date"), (users[0], homework_name, class_name, class_teacher, period, due_date))
-        await interaction.response.send_message(content="Successfully inserted homework!", ephemeral=True)
+    await interaction.response.send_message(content=msg, ephemeral=True)
 
 
 @tree.command(name="show_homework", description="Shows you your to-do list!")
@@ -178,7 +132,7 @@ async def show_homework(interaction):
     embed_list = []
     embed = discord.Embed(title="All Homework Details:", color=discord.Color.yellow())
     # Checks if any homeworks exist.
-    await interaction.response.defer()
+    await interaction.response.defer(ephemeral=get_settings(interaction.user.id)[2])
     if not data:
         await interaction.followup.send(embed=embed, ephemeral=get_settings(interaction.user.id)[2])
     index = 0
@@ -232,26 +186,15 @@ async def change_homework_status(interaction, homework_name: str, class_name: st
         await interaction.response.send_message(content="Successfully updated homework!", ephemeral=True)
 
 
-@tree.command(name="info", description="Provides basic info about HomeworkBot!")
-async def info(interaction):
-    embed = discord.Embed(title="What is HomeworkBot?",color=discord.Color.blurple(), description="**HomeworkBot** is a Discord Bot built for those who run **School Discord Servers**. "
-                                                                                                  "Its primary function is to act as a **better to-do list for students**."
-                                                                                                  " It can (will be able to in the future) **assign homework automatically** to you from your classmates who use this bot."
-                          )
-    embed.add_field(name="Admin Commands", value="There are currently 6 admin commands and they allow whomever is hosting this bot to **modify the valid periods, valid classes, and valid teacher names**.", inline=False)
-    embed.add_field(name="Homework Commands", value="There are 7 rudimentary homework commands: **add, remove, show, and change status**. These can be used by **anyone** (though for the show command, it currently only **supports 3 homeworks**.)", inline=False)
-    embed.add_field(name="Future Commands", value="HomeworkBot is still **under development** (therefore **bugs should be expected**) and new commands will be added such as the ability to **sync your to-do lists** with others.", inline=False)
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
 # Shows settings in an embed.
 @tree.command(name="settings", description="Provides your settings information on HomeworkBot!")
 async def settings(interaction):
     embed = discord.Embed(title="User Settings:", color=discord.Color.orange())
-    auto_sync, auto_delete, visible_homework = get_settings(interaction.user.id)
-    embed.add_field(name="Auto Sync:", value=auto_sync, inline=True)
-    embed.add_field(name="Auto Delete:", value=auto_delete, inline=True)
-    embed.add_field(name="Visible Homework:", value=visible_homework, inline=True)
+    auto_sync, auto_delete, visible_homework, auto_dm = get_settings(interaction.user.id)
+    embed.add_field(name="Auto-Sync:", value=auto_sync, inline=False)
+    embed.add_field(name="Auto-Delete:", value=auto_delete, inline=False)
+    embed.add_field(name="Visible Homework:", value=visible_homework, inline=False)
+    embed.add_field(name="Auto-DM:", value=auto_dm, inline=False)
     await interaction.response.send_message(embed=embed, ephemeral=get_settings(interaction.user.id)[2])
 
 
@@ -314,18 +257,8 @@ async def get_help(interaction):
     await interaction.response.send_message(view=HelpMenu(), ephemeral=True)
 
 
-# Loop for sending DMs when homework is not done.
-@tasks.loop(hours=24)
-async def timer():
-    for value in dict_get_all_data_in_table("homework_data"):
-        time = dt.now()
-        times = dt.strptime(value["due_date"], "%m/%d/%Y")
-        if time.month == times.month and time.day == times.day and time.year == times.year:
-            if not value["homework_status"]:
-                user = await client.fetch_user(value["user_id"])
-                await user.send(f"Your homework {value["homework_name"]} is due!")
-        else:
-            pass
-
+@tree.command(name="features", description="Provides information on settings!")
+async def get_features(interaction):
+    await interaction.response.send_message(view=FeatureMenu(), ephemeral=True)
 
 client.run(DISCORD_TOKEN)
